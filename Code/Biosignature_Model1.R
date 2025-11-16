@@ -184,3 +184,31 @@ rf2_Unknownpred$`Analysis File #`<-rownames(rf2_Unknownpred)
 
 merged_unknown_results<-merge(Biosign_Supervised_Unknown[,c("Analysis File #","Description","Divided Photosyn")],rf2_Unknownpred)
 write.csv(merged_unknown_results,"~/Downloads/Biosign_Photosyn_v_NonPhotosyn_NoSyntheticsModel_232samples_UnknownPred_April10.csv")
+
+#Cross Validation
+
+library(caret)
+repeat_cv <- trainControl(method='repeatedcv', number=10, repeats=3)
+
+## Train a random forest model
+forest <- train(
+  
+  # Formula. We are using all variables to predict
+  Photosyn ~ ., 
+  
+  # Source of data; remove the Species variable
+  data=Biosign_Supervised_Sub[,-1], 
+  
+  # `rf` method for random forest
+  method='rf', 
+  
+  # Add repeated cross validation as trControl
+  trControl=repeat_cv,
+  
+  # Accuracy to measure the performance of the model
+  metric='Accuracy')
+
+## Print out the details about the model
+forest$finalModel
+
+forest
