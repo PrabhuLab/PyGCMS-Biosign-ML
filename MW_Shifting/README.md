@@ -2,13 +2,11 @@
 
 ## Overview
 
-Gas chromatography-mass spectrometry (GC-MS) data collected on different instruments often exhibit retention-time shifts, even when analyzing the same sample. These shifts can occur when transitioning between older and newer instruments, after routine maintenance, or when a GC column is trimmed, causing peaks to appear at different scan numbers than they did previously. As a result, direct comparison between datasets becomes difficult because corresponding compounds no longer align.
+Gas chromatography-mass spectrometry (GC-MS) data collected on different instruments often exhibit retention-time shifts, even when analyzing the same sample. These shifts can occur when transitioning between older and newer instruments, after routine maintenance, or when a GC column is trimmed, causing peaks to appear at different scan numbers than before. 
 
-This project aims to provide a framework for aligning py-GC-MS datasets collected under different instrument conditions. The software identifies corresponding peaks between reference datasets and models the relationship between their scan positions using a logarithmic correction function. Once calibrated, the model can shift historical data so that peaks collected on different instruments align with one another.
+This project aims to provide a framework for aligning py-GC-MS datasets collected under different instrument conditions. The pipeline identifies corresponding peaks between reference datasets and models the relationship between their scan positions using a logarithmic correction function. Once calibrated, the model can shift historical data so that peaks collected on different instruments align.
 
-The processing pipeline includes baseline correction, denoising, peak detection, calibration of alignment parameters, and export of corrected datasets. By aligning data collected before and after maintenance events or across multiple instruments, previously collected samples can be incorporated into the same analysis workflow without requiring manual adjustment of retention times.
-
-Understanding how retention times shift between instruments enables the integration of data collected over long periods of time and across different laboratories, reducing instrument-specific variability and improving the consistency of downstream analyses.
+The processing pipeline includes baseline correction, denoising, peak detection, calibration of alignment parameters, and export of corrected datasets. By aligning data collected before and after maintenance events or across multiple instruments, previously collected samples can be incorporated into the same analysis workflow without requiring manual retention-time adjustments.
 
 ---
 
@@ -62,13 +60,6 @@ The loader automatically:
 * Separates metadata from spectral data
 * Uses scan number as the index
 * Removes unnamed columns
-* Restricts analysis to the selected mass range
-
-Default spectral range:
-
-```python
-50-700
-```
 
 ---
 
@@ -179,7 +170,7 @@ peaks = AlignSpectra.detect_maxima(
 
 ## Calibrating Alignment Parameters
 
-Calibration requires paired datasets collected from different instruments or instrument states.
+Calibration requires paired datasets collected from different instruments or instrument states. 
 
 Example:
 
@@ -226,14 +217,16 @@ For each paired dataset:
 5. Remove outliers
 6. Fit a logarithmic model
 
+The method iterates over peak detection window sizes to determine the optimal size for creating the most accurate model. 
+
 The resulting model has the form:
 
-offset = a * ln(x) + b
+`offset = a * ln(x) + b`
 
 where:
 
-* x is the scan number
-* a and b are learned parameters
+* `x` is the scan number
+* `a` and `b` are learned parameters
 
 ---
 
@@ -275,7 +268,7 @@ The exported file:
 
 * Preserves metadata
 * Applies scan correction
-* Writes a new CSV file
+* Writes a new .3D file
 
 ---
 
