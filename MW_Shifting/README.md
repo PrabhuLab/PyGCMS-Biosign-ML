@@ -49,7 +49,7 @@ The software operates on exported py-GC-MS files containing scan-indexed spectra
 Example:
 
 ```text
-Abundances from D:\[USERNAME]\GCMS\1\data\[PROJECT]\FILENAME.D   Edit C:\USERNAME\MSEXE\\export3d.mac if desired to change output.
+Abundances from D:\[USER]\GCMS\1\data\[PROJECT]\FILENAME.D   Edit C:\[USER]\MSEXE\\export3d.mac if desired to change output.
 Mass Range,     50,    700,
 Scan Range,      1,   6295,
 Scan number is in the first column
