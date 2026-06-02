@@ -77,7 +77,7 @@ Default spectral range:
 ### Loading a Dataset
 
 ```python
-from align_spectra import AlignSpectra
+from AlignSpectra import AlignSpectra
 
 processor = AlignSpectra(
     file_path="sample.3D"
@@ -203,7 +203,7 @@ a, b, window, accuracy = (
 )
 
 print("Optimal window:", window, "scans")
-print(f"Optimal model: {a.round(2)}*ln(x) + {b.round(2)}"
+print(f"Optimal model: {a.round(2)}*ln(x) + {b.round(2)}")
 print(f"Accuracy: {accuracy}%")
 ```
 
@@ -282,7 +282,7 @@ The exported file:
 ## Complete Example
 
 ```python
-from align_spectra import AlignSpectra
+from AlignSpectra import AlignSpectra
 
 training_pairs = [
     (
