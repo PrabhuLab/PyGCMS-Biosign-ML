@@ -42,7 +42,7 @@ rownames(Biosign_Supervised)
 colnames(Biosign_Supervised)[1:20]
 
 #Biotic v Abiotic
-Biosign_Supervised_Sub <- na.omit(Biosign_Supervised[,c(3,7,21:8723)])
+Biosign_Supervised_Sub <- na.omit(Biosign_Supervised[,c(3,5,21:8723)])
 
 rownames(Biosign_Supervised_Sub)
 colnames(Biosign_Supervised_Sub)[1:10]
