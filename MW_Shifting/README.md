@@ -2,24 +2,25 @@
 
 ## Overview
 
-Gas chromatography-mass spectrometry (GC-MS) data collected on different instruments often exhibit retention-time shifts, even when analyzing the same sample. These shifts can occur when transitioning between older and newer instruments, after routine maintenance, or when a GC column is trimmed, causing peaks to appear at different scan numbers than before. 
+Spectral and chromatographic data (such as py-GC-MS, Raman, FT-IR, and NMR) collected on different instruments often exhibit X-axis shifts, even when analyzing the same sample. These shifts can occur when transitioning between older and newer instruments, after routine maintenance, or due to laser/detector calibration differences, causing peaks to appear at different positions than before. 
 
-This project aims to provide a framework for aligning py-GC-MS datasets collected under different instrument conditions. The pipeline identifies corresponding peaks between reference datasets and models the relationship between their scan positions using a logarithmic correction function. Once calibrated, the model can shift historical data so that peaks collected on different instruments align.
+This project aims to provide a universal framework for aligning datasets collected under different instrument conditions. The pipeline identifies corresponding peaks between reference datasets and models the relationship between their positions using best-fit mathematical functions (linear, logarithmic, exponential, polynomial, or power series). Once calibrated, the model can shift historical data and interpolate it back onto a standard grid so that peaks collected on different instruments align perfectly.
 
-The processing pipeline includes baseline correction, denoising, peak detection, calibration of alignment parameters, and export of corrected datasets. By aligning data collected before and after maintenance events or across multiple instruments, previously collected samples can be incorporated into the same analysis workflow without requiring manual retention-time adjustments.
+The processing pipeline includes baseline correction, optional denoising, peak detection, calibration of alignment parameters, interpolation, and export of corrected datasets. By aligning data collected before and after maintenance events or across multiple instruments, previously collected samples can be incorporated into the same analysis workflow without requiring manual adjustments.
 
 ---
 
 ## Features
 
-* Import py-GC-MS data exported from instrument software
-* Preserve original metadata headers
+* Import generic 1D and 2D spectral data from standard CSV files
+* Handles discrete (Scan number) and continuous (Wavenumber, Retention Time) X-axes
 * Baseline correction using Asymmetric Least Squares (ALS)
-* Signal denoising using urQRd
-* Automated peak detection
-* Calibration of scan shifts between instruments
-* Logarithmic retention-time alignment
-* Visualization of raw and processed chromatograms
+* Signal denoising using urQRd (optional)
+* Automated peak detection using SciPy
+* Calibration of spectral shifts between instruments
+* Multi-model alignment (linear, logarithmic, exponential, polynomial, power)
+* Data interpolation for standardized X-axis grids
+* Visualization of raw and processed spectra
 * Export of corrected datasets
 
 ---
@@ -34,32 +35,28 @@ pip install numpy pandas scipy matplotlib
 
 ### Optional Dependency
 
-Preprocessing requires urQRd, which is located in this folder. Please note that this version of urQRd was modified by Miles Walters from the available copy of the original algorithm found [here](https://doi.org/10.1073/pnas.1306700111).   
+Preprocessing can optionally utilize urQRd for signal denoising, which should be located in this folder. Please note that this version of urQRd was modified by Miles Walters from the available copy of the original algorithm found [here](https://doi.org/10.1073/pnas.1306700111).   
 
-Without urQRd, alignment calibration and preprocessing functions will not be available.
+Without urQRd, the pipeline will still execute baseline correction and alignment, but the specific denoising step will be bypassed.
 
 ---
 
 ## Data Format
 
-The software operates on exported py-GC-MS files containing scan-indexed spectra. These can be found in the .3D files in the Py-GC-MS outputs. 
+The software operates on standard CSV datasets. It can process 1D single-trace spectra (e.g., a single Raman or FT-IR scan) or 2D matrices (e.g., GC-MS scan vs *m/z* ranges). 
 
-Example:
+Example CSV Structure:
 
 ```text
-Abundances from D:\[USER]\GCMS\1\data\[PROJECT]\FILENAME.D   Edit C:\[USER]\MSEXE\\export3d.mac if desired to change output.
-Mass Range,     50,    700,
-Scan Range,      1,   6295,
-Scan number is in the first column
-Scan,     50,     51,     52,     53,     54,     55,  ...
+Instrument Metadata Header 1
+Instrument Metadata Header 2
+Scan,50,51,52,53,54,55,...
+1,0,0,12,34,5,0,...
+2,0,1,14,35,4,0,...
 ...
 ```
 
-The loader automatically:
-
-* Separates metadata from spectral data
-* Uses scan number as the index
-* Removes unnamed columns
+The loader automatically allows you to skip metadata rows and designate an X-axis column. 
 
 ---
 
@@ -71,13 +68,23 @@ The loader automatically:
 from AlignSpectra import AlignSpectra
 
 processor = AlignSpectra(
-    file_path="sample.3D"
+    file_path="sample.csv",
+    x_label="Scan",
+    y_label="Intensity"
 )
 ```
 
-The dataset is automatically loaded during initialization.
+If your file has metadata headers to skip, you can load it manually:
 
----
+```python
+processor = AlignSpectra()
+
+processor.load_file(
+    file_path="sample.csv",
+    index_col=0,
+    skiprows=2
+)
+```
 
 ### Accessing the DataFrame
 
@@ -93,15 +100,15 @@ print(df.head())
 
 Preprocessing consists of:
 
-1. Summation of spectral intensities
+1. Summation of spectral intensities (if analyzing 2D matrix data)
 2. Baseline correction
-3. urQRd denoising
+3. urQRd denoising (if installed)
 
 ```python
 processed = processor.preprocess()
 ```
 
-The processed signal is stored as a DataFrame:
+The processed signal is stored as a 1D NumPy array:
 
 ```python
 processor.processed_data
@@ -111,7 +118,7 @@ processor.processed_data
 
 ## Plotting
 
-### Processed Chromatogram
+### Processed Spectra
 
 ```python
 import matplotlib.pyplot as plt
@@ -123,7 +130,7 @@ processor.plot_spectra()
 plt.show()
 ```
 
-### Raw Chromatogram
+### Raw Spectra
 
 ```python
 processor.plot_spectra(
@@ -137,7 +144,7 @@ plt.show()
 
 ## Peak Detection
 
-Peak detection identifies local maxima in the processed chromatogram.
+Peak detection identifies local maxima in the processed spectra using SciPy's generalized peak finder.
 
 ```python
 processed = processor.preprocess()
@@ -156,103 +163,92 @@ print(peaks)
 peaks = AlignSpectra.detect_maxima(
     processed,
     processor.df.index.tolist(),
-    step=80,
-    threshold=15000
+    prominence=1500,
+    distance=20
 )
 ```
 
-| Parameter | Description                            |
-| --------- | -------------------------------------- |
-| step      | Window size used during peak searching |
-| threshold | Minimum peak intensity                 |
+| Parameter  | Description                                       |
+| ---------- | ------------------------------------------------- |
+| prominence | Minimum height of the peak relative to baseline   |
+| distance   | Minimum horizontal X-axis distance between peaks  |
 
 ---
 
 ## Calibrating Alignment Parameters
 
-Calibration requires paired datasets collected from different instruments or instrument states. 
+Calibration requires paired datasets collected from different instruments or instrument states. The software can test all available shift models to find the mathematical function that aligns the data with the highest accuracy.
 
 Example:
 
 ```python
 pairs = [
     (
-        "old_machine_run_1.3D",
-        "new_machine_run_1.3D"
+        "old_machine_run_1.csv",
+        "new_machine_run_1.csv"
     ),
     (
-        "old_machine_run_2.3D",
-        "new_machine_run_2.3D"
+        "old_machine_run_2.csv",
+        "new_machine_run_2.csv"
     )
 ]
 
-a, b, window, accuracy = (
+shift_type, model, dist, accuracy = (
     AlignSpectra.calibrate_shift_parameters(
         pairs,
+        shift_type='all',
         verbose=True
     )
 )
 
-print("Optimal window:", window, "scans")
-print(f"Optimal model: {a.round(2)}*ln(x) + {b.round(2)}")
-print(f"Accuracy: {accuracy}%")
+print("Optimal peak distance:", dist)
+print("Optimal shift type:", shift_type)
+print("Optimal model params:", model)
+print(f"Accuracy: {accuracy * 100:.2f}%")
 ```
 
 Output:
 
 ```text
-Optimal window: 85 scans
-Optimal model: 4.83*ln(x) + 2.14
-Accuracy: 96.8%
+Optimal peak distance: 15
+Optimal shift type: polynomial
+Optimal model params: (0.002, 1.45, 3.2)
+Accuracy: 96.80%
 ```
 
 ### Calibration Method
 
 For each paired dataset:
 
-1. Preprocess both chromatograms
-2. Detect chromatographic peaks
-3. Match corresponding peaks
-4. Measure scan offsets
-5. Remove outliers
-6. Fit a logarithmic model
+1. Preprocess both spectra
+2. Detect peaks based on dynamic prominence
+3. Match closest corresponding peaks within an allowable offset
+4. Filter out mismatched outliers using interquartile ranges (IQR)
+5. Fit models (linear, log, exponential, polynomial, power) to the peak shifts
 
-The method iterates over peak detection window sizes to determine the optimal size for creating the most accurate model. 
-
-The resulting model has the form:
-
-`offset = a * ln(x) + b`
-
-where:
-
-* `x` is the scan number
-* `a` and `b` are learned parameters
+The method iterates over peak `distance` parameters to determine the optimal density for creating the most accurate model. 
 
 ---
 
 ## Applying Alignment
 
-After calibration:
+After calibration, you can apply the model to an unaligned dataset:
 
 ```python
 processor = AlignSpectra(
-    file_path="old_sample.3D",
+    file_path="old_sample.csv",
     is_old=True
 )
 
 processor.set_shift_parameters(
-    a,
-    b
+    shift_type=shift_type,
+    a=model[0],
+    b=model[1],
+    c=model[2] if len(model) > 2 else None
 )
 ```
 
-The alignment function is:
-
-```python
-shifted_scan = scan + (
-    a * np.log(scan) + b
-)
-```
+The underlying data is mathematically shifted and, by default, interpolated back onto the original X-axis grid so datasets can be directly compared or subtracted.
 
 ---
 
@@ -260,15 +256,16 @@ shifted_scan = scan + (
 
 ```python
 processor.save_shifted(
-    "aligned/aligned_sample.3D"
+    "aligned/aligned_sample.csv",
+    interpolate=True
 )
 ```
 
 The exported file:
 
-* Preserves metadata
-* Applies scan correction
-* Writes a new .3D file
+* Applies mathematical X-axis correction
+* Resamples intensities onto standard grid
+* Writes a standard CSV file
 
 ---
 
@@ -279,14 +276,15 @@ from AlignSpectra import AlignSpectra
 
 training_pairs = [
     (
-        "old_reference.3D",
-        "new_reference.3D"
+        "old_reference.csv",
+        "new_reference.csv"
     )
 ]
 
-a, b, _, accuracy = (
+shift_type, model, _, accuracy = (
     AlignSpectra.calibrate_shift_parameters(
         training_pairs,
+        shift_type='all',
         verbose=True
     )
 )
@@ -295,14 +293,20 @@ print(
     f"Calibration accuracy: {accuracy:.2%}"
 )
 
+# Unpack parameters safely based on model size
+a, b = model[0], model[1]
+c = model[2] if len(model) > 2 else None
+
 sample = AlignSpectra(
-    file_path="old_unknown.3D",
+    file_path="old_unknown.csv",
     is_old=True
 )
 
 sample.set_shift_parameters(
+    shift_type,
     a,
-    b
+    b,
+    c
 )
 
 sample.preprocess()
@@ -310,7 +314,7 @@ sample.preprocess()
 sample.plot_spectra()
 
 sample.save_shifted(
-    "aligned_unknown.3D"
+    "aligned_unknown.csv"
 )
 ```
 
@@ -321,27 +325,35 @@ sample.save_shifted(
 ```python
 AlignSpectra(
     file_path=None,
+    df=None,
     is_old=True,
+    shift_type='logarithmic',
     a=None,
     b=None,
-    columns=None
+    c=None,
+    y_cols=None,
+    x_label="X-axis",
+    y_label="Intensity"
 )
 ```
 
-| Parameter | Description                                              |
-| --------- | -------------------------------------------------------- |
-| file_path | Path to spectral file                                    |
-| is_old    | Whether alignment should be applied                      |
-| a         | Logarithmic coefficient                                  |
-| b         | Constant offset                                          |
-| columns   | Spectral column range used in analysis (50-700 if blank) |
+| Parameter   | Description                                              |
+| ----------- | -------------------------------------------------------- |
+| file_path   | Path to spectral file (CSV)                              |
+| df          | Optional pre-loaded pandas DataFrame                     |
+| is_old      | Whether alignment should be applied                      |
+| shift_type  | Mathematical shift ('linear', 'logarithmic', etc.)       |
+| a, b, c     | Coefficients for the shift equation                      |
+| y_cols      | Specific columns to sum (for 2D data). Blank sums all.   |
+| x_label     | String label for the X-axis (e.g., 'Wavenumber')         |
+| y_label     | String label for the Y-axis (e.g., 'Absorbance')         |
 
 ---
 
 ## Processing Workflow
 
 ```text
-Raw py-GC-MS Data --> Intensity Summation --> Baseline Correction --> urQRd Denoising --> Peak Detection --> Calibration --> Logarithmic Shift Model --> Peak Alignment --> Corrected Dataset
+Raw Spectral Data --> Intensty Summation (Optional) --> Baseline Correction --> urQRd Denoising --> Peak Detection --> Calibration --> Model Selection --> Peak Alignment --> Grid Interpolation --> Corrected Dataset
 ```
 
 ---
@@ -355,38 +367,32 @@ ValueError:
 No file path provided
 ```
 
-### Invalid File Format
-
-```python
-ValueError:
-File format error:
-'Scan,' header not found
-```
-
-### Missing urQRd
-
-```python
-ImportError:
-urQRd package is required for preprocessing
-```
-
 ### Missing Shift Parameters
 
 ```python
 ValueError:
-No valid "a" value
+Shift parameters missing. Set them manually or run calibrate_shift_parameters().
 ```
+
+### Missing Polynomial/Exponential Parameter
 
 ```python
 ValueError:
-No valid "b" value
+The 'polynomial' shift requires a 'c' parameter.
+```
+
+### Calibration Failure
+
+```python
+RuntimeError:
+Calibration failed - no valid models found. Try adjusting prominence or max_offset thresholds.
 ```
 
 ---
 
 ## Citation
 
-If this software contributes to published research, please cite the associated project, manuscript, or repository describing the alignment methodology and py-GC-MS retention-time correction framework.
+If this software contributes to published research, please cite the associated project, manuscript, or repository describing the alignment methodology and spectral retention-time correction framework.
 
 ---
 
